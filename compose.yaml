@@ -1,0 +1,12 @@
+services:
+  inbox-lens:
+    build: .
+    environment:
+      INBOX_LENS_ENV_FILE: /app/config/.env
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - ./data:/app/data
+      - ./out:/app/out
+      - ./config:/app/config
+    command: ["inbox-lens", "console", "--host", "0.0.0.0", "--no-browser"]
