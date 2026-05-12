@@ -1,0 +1,21 @@
+# Personal rules are optional. Copy this file to config/rules.toml and edit it.
+#
+# A rule matches when every configured condition is true. Each condition can be
+# a string or a list of strings. Matching is case-insensitive.
+
+[[rules]]
+name = "Finance alerts"
+sender_contains = ["billing@", "bank"]
+subject_contains = ["invoice", "账单"]
+category = "账单与财务"
+priority = "P0"
+action = "需执行"
+note = "finance message from a known sender"
+
+[[rules]]
+name = "Team updates"
+sender_contains = "manager@example.com"
+category = "个人/工作沟通"
+priority = "P0"
+action = "需回复"
+note = "direct manager"
