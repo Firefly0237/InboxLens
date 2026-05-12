@@ -1,0 +1,15 @@
+.env
+config/rules.toml
+*.db
+*.sqlite
+out/
+data/
+__pycache__/
+.pytest_cache/
+.venv/
+.idea/
+.claude/
+docs/
+*.iml
+inbox_lens.egg-info/
+email_digest_design.md
