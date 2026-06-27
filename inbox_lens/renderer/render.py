@@ -53,7 +53,7 @@ def render_digest_text(digest: Digest) -> str:
     if action_records:
         lines.append("== 待处理事项 ==")
         for record in action_records:
-            action = record.summary.action_required or record.classification.action
+            action = _agenda_action_label(record)
             deadline = f"；时效：{record.classification.deadline}" if record.classification.deadline else ""
             thread_tag = _thread_tag(record, digest.thread_counts)
             lines.append(f"- {record.mail.subject or '(无主题)'}{thread_tag}：{action}{deadline}")
@@ -97,7 +97,7 @@ def _action_agenda_section(records: list[ProcessedRecord], thread_counts: dict[s
         return ""
     rows: list[str] = []
     for record in records[:8]:
-        action = record.summary.action_required or record.classification.action
+        action = _agenda_action_label(record)
         deadline = f" · 时效：{record.classification.deadline}" if record.classification.deadline else ""
         thread_tag = _thread_tag(record, thread_counts)
         rows.append(
@@ -252,6 +252,16 @@ def _format_dt(value: datetime) -> str:
     return value.strftime("%Y-%m-%d %H:%M")
 
 
+def _agenda_action_label(record: ProcessedRecord) -> str:
+    label = record.summary.action_required or record.classification.action
+    # Items reach the agenda either because they need action or only because they carry a
+    # deadline. For the deadline-only case the action is "仅知晓", which reads as a
+    # contradictory to-do, so surface the deadline instead of the bare label.
+    if label == "仅知晓":
+        return "留意时效" if record.classification.deadline else "仅知晓"
+    return label
+
+
 def _action_records(records: list[ProcessedRecord]) -> list[ProcessedRecord]:
     actionable = [
         record
@@ -261,10 +271,12 @@ def _action_records(records: list[ProcessedRecord]) -> list[ProcessedRecord]:
     return sorted(actionable, key=_agenda_sort_key)
 
 
-def _agenda_sort_key(record: ProcessedRecord) -> tuple[int, datetime]:
+def _agenda_sort_key(record: ProcessedRecord) -> tuple[int, int, datetime]:
     priority_rank = {"P0": 0, "P1": 1, "P2": 2}.get(record.classification.priority, 3)
     action_rank = {"需回复": 0, "需执行": 1, "仅知晓": 2}.get(record.classification.action, 3)
-    return min(priority_rank, action_rank), record.mail.received_at
+    # Priority is the primary key; action breaks ties within a priority. These are two
+    # independent scales, so combining them with min() (the old bug) scrambled the order.
+    return priority_rank, action_rank, record.mail.received_at
 
 
 def _action_count(records: list[ProcessedRecord]) -> int:

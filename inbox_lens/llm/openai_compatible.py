@@ -47,11 +47,20 @@ class OpenAICompatibleClient:
         except urllib.error.URLError as exc:
             raise LLMError(f"LLM request failed: {exc.reason}") from exc
 
-        data = json.loads(body)
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError as exc:
+            # A proxy/gateway can return HTTP 200 with a non-JSON body (e.g. an HTML error page).
+            raise LLMError(f"LLM returned a non-JSON response body: {body[:300]}") from exc
         try:
             content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMError("LLM response did not contain choices[0].message.content") from exc
+        if not isinstance(content, str):
+            # Some servers return content=null (refusal / tool_call / content filter) or a
+            # list of content blocks. Surface it as LLMError so callers fall back gracefully
+            # instead of crashing on content.strip().
+            raise LLMError(f"LLM response content was not a string: {type(content).__name__}")
         return _parse_json_object(content)
 
 

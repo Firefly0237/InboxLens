@@ -4,7 +4,14 @@ import unittest
 from datetime import UTC, datetime
 
 from inbox_lens.classifier import classify_with_rules
-from inbox_lens.models import CATEGORY_FINANCE, CATEGORY_MARKETING, CATEGORY_PERSONAL, ProcessedMail, RawMail
+from inbox_lens.models import (
+    CATEGORY_FINANCE,
+    CATEGORY_MARKETING,
+    CATEGORY_PERSONAL,
+    CATEGORY_SOCIAL,
+    ProcessedMail,
+    RawMail,
+)
 
 
 def _mail(subject: str, sender: str, text: str, headers: dict[str, str] | None = None) -> ProcessedMail:
@@ -45,6 +52,19 @@ class ClassifierTests(unittest.TestCase):
         result = classify_with_rules(_mail("Question about the project", "Alice <alice@example.com>", "Could you review this?"))
         self.assertEqual(result.category, CATEGORY_PERSONAL)
         self.assertEqual(result.action, "需执行")
+
+    def test_social_domain_match_is_suffix_not_substring(self) -> None:
+        # "x.com" is a social domain; "fax.com" must NOT match it via substring.
+        result = classify_with_rules(_mail("Meeting notes", "team@fax.com", "see notes attached"))
+        self.assertNotEqual(result.category, CATEGORY_SOCIAL)
+
+    def test_social_domain_spoofed_suffix_is_not_trusted(self) -> None:
+        result = classify_with_rules(_mail("Hi", "noreply@github.com.evil.example", "click here"))
+        self.assertNotEqual(result.category, CATEGORY_SOCIAL)
+
+    def test_real_social_subdomain_is_detected(self) -> None:
+        result = classify_with_rules(_mail("New follower", "notifications@notifications.github.com", "you have a new follower"))
+        self.assertEqual(result.category, CATEGORY_SOCIAL)
 
 
 if __name__ == "__main__":
