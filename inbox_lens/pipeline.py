@@ -61,7 +61,14 @@ def run_digest(
             repo.finish_run(run_id, "dry_run", len(records))
         else:
             # Mark messages as processed only after render/send has succeeded.
-            repo.save_messages(run_id, records)
+            stored = repo.save_messages(run_id, records)
+            if stored < len(records):
+                # Distinct emails can share a Message-ID (resent/forwarded mail); INSERT OR
+                # IGNORE drops the duplicate. Surface it so the loss is not silent.
+                print(
+                    f"警告：{len(records) - stored} 封邮件因 Message-ID 冲突未写入数据库"
+                    "（可能是被转发或重复的邮件）。"
+                )
             repo.cleanup(settings.retention_days)
             # "empty" surfaces a no-op run in the dashboard so the user can tell quiet days from missed runs.
             status = "success" if records else "empty"

@@ -97,7 +97,14 @@ class Repository:
             ).fetchone()
         return row is not None
 
-    def save_messages(self, run_id: int, records: list[ProcessedRecord]) -> None:
+    def save_messages(self, run_id: int, records: list[ProcessedRecord]) -> int:
+        """Persist records, returning the number actually inserted.
+
+        message_id is the PRIMARY KEY and inserts use INSERT OR IGNORE, so a record whose
+        Message-ID collides with an existing row (resent/forwarded mail, or a previously
+        processed message) is dropped. Returning the count lets the caller surface that loss
+        instead of it happening silently.
+        """
         now = _to_iso(datetime.now(UTC))
         rows = []
         for record in records:
@@ -122,6 +129,7 @@ class Repository:
                 )
             )
         with self.connect() as connection:
+            before = connection.total_changes
             connection.executemany(
                 """
                 INSERT OR IGNORE INTO messages (
@@ -133,6 +141,7 @@ class Repository:
                 """,
                 rows,
             )
+            return connection.total_changes - before
 
     def cleanup(self, retention_days: int) -> None:
         if retention_days <= 0:

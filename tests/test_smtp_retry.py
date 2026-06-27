@@ -39,33 +39,70 @@ def _settings() -> Settings:
     )
 
 
+class _FakeSMTP:
+    def __init__(self) -> None:
+        self.sent = 0
+
+    def __enter__(self) -> "_FakeSMTP":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    def send_message(self, _message: object) -> None:
+        self.sent += 1
+
+
 class SMTPRetryTests(unittest.TestCase):
-    def test_transient_error_is_retried(self) -> None:
+    def test_transient_connection_error_is_retried(self) -> None:
         sink = SMTPSink(_settings(), max_attempts=3, initial_backoff=0)
         attempts = {"n": 0}
+        smtp = _FakeSMTP()
 
-        def fake_send(_message):
+        def fake_connect() -> _FakeSMTP:
             attempts["n"] += 1
             if attempts["n"] < 3:
                 raise smtplib.SMTPServerDisconnected("temporary")
+            return smtp
 
-        sink._send_once = fake_send  # type: ignore[assignment]
+        sink._connect = fake_connect  # type: ignore[assignment]
         sink.send("subject", "<p>hi</p>", "hi")
 
         self.assertEqual(attempts["n"], 3)
+        self.assertEqual(smtp.sent, 1)
 
     def test_authentication_error_fails_fast(self) -> None:
         sink = SMTPSink(_settings(), max_attempts=3, initial_backoff=0)
         attempts = {"n": 0}
 
-        def fake_send(_message):
+        def fake_connect() -> _FakeSMTP:
             attempts["n"] += 1
             raise smtplib.SMTPAuthenticationError(535, b"bad password")
 
-        sink._send_once = fake_send  # type: ignore[assignment]
+        sink._connect = fake_connect  # type: ignore[assignment]
         with self.assertRaises(smtplib.SMTPAuthenticationError):
             sink.send("subject", "<p>hi</p>", "hi")
         self.assertEqual(attempts["n"], 1)
+
+    def test_send_failure_after_connect_is_not_retried(self) -> None:
+        # A disconnect once the message has been handed off must NOT trigger a resend,
+        # otherwise the server may deliver the digest twice.
+        sink = SMTPSink(_settings(), max_attempts=3, initial_backoff=0)
+        connects = {"n": 0}
+
+        class _DisconnectingSMTP(_FakeSMTP):
+            def send_message(self, _message: object) -> None:
+                self.sent += 1
+                raise smtplib.SMTPServerDisconnected("dropped after DATA")
+
+        def fake_connect() -> _FakeSMTP:
+            connects["n"] += 1
+            return _DisconnectingSMTP()
+
+        sink._connect = fake_connect  # type: ignore[assignment]
+        with self.assertRaises(smtplib.SMTPServerDisconnected):
+            sink.send("subject", "<p>hi</p>", "hi")
+        self.assertEqual(connects["n"], 1)
 
 
 if __name__ == "__main__":
