@@ -11,8 +11,27 @@ MAX_BODY_CHARS = 12000
 TAIL_CHARS = 1800
 
 
+_HTML_PLACEHOLDER_RE = re.compile(
+    r"(view\s+(?:this\s+)?(?:e-?mail|message|newsletter)\s+(?:online|in\s+(?:your\s+)?browser)"
+    r"|can'?t\s+(?:see|view|read)\s+this"
+    r"|trouble\s+viewing"
+    r"|enable\s+(?:html|images)"
+    r"|无法(?:正常)?(?:显示|查看)"
+    r"|在浏览器中(?:查看|打开)"
+    r"|查看网页版)",
+    re.I,
+)
+
+
+def _is_html_placeholder_stub(text: str) -> bool:
+    # A short plain part that is just a "view in browser" notice means the real content lives
+    # in the HTML part. A short genuine reply ("Approved, thanks.") is NOT a stub and must be kept.
+    return len(text) < 200 and bool(_HTML_PLACEHOLDER_RE.search(text))
+
+
 def preprocess_mail(mail: RawMail) -> ProcessedMail:
-    if mail.text_body.strip() and (len(mail.text_body.strip()) >= 50 or not mail.html_body):
+    text_body = mail.text_body.strip()
+    if text_body and (not mail.html_body or not _is_html_placeholder_stub(text_body)):
         source = "text/plain"
         text = mail.text_body
     else:

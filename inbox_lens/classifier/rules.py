@@ -77,7 +77,7 @@ def _category_from_rules(
         return CATEGORY_FINANCE, 0.82, "finance keywords or amount detected"
     if _has_any(searchable, TRANSACTION_KEYWORDS):
         return CATEGORY_TRANSACTION, 0.78, "transaction keywords detected"
-    if any(domain in sender_domain for domain in SOCIAL_DOMAINS):
+    if any(sender_domain == domain or sender_domain.endswith(f".{domain}") for domain in SOCIAL_DOMAINS):
         return CATEGORY_SOCIAL, 0.86, f"known collaboration/social domain: {sender_domain}"
     if _looks_system_generated(searchable, sender_domain, headers):
         return CATEGORY_SYSTEM, 0.76, "system sender or auto-submitted header detected"

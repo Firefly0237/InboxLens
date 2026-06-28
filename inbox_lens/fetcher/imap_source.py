@@ -42,8 +42,13 @@ class IMAPSource:
             for uid in candidate_uids:
                 if limit is not None and len(messages) >= limit:
                     break
-                raw = self._fetch_one(mailbox, uid)
-                mail = parse_raw_mail(uid, raw)
+                try:
+                    raw = self._fetch_one(mailbox, uid)
+                    mail = parse_raw_mail(uid, raw)
+                except Exception:
+                    # A single corrupt/undownloadable message must not abort the whole run and
+                    # discard everything already fetched; skip it and keep going.
+                    continue
                 # Date may differ slightly between the cheap header peek and the parsed body; keep the window check.
                 if mail.received_at.astimezone(UTC) >= since_utc:
                     messages.append(mail)
